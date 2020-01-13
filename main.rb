@@ -44,6 +44,15 @@ def password_valid?(password, password_config)
     return true
 end
 
+def generate_password(password_config)
+    password = nil
+    loop do
+        password = SecureRandom::base64(password_config['MinimumLength']+2) # some padding
+        break if password_valid?(password, password_config)
+    end
+    return password
+end
+
 # How to use:
 #
 # 1. Place this file in your Mattermost server directory, usually `/opt/mattermost/scripts`, and run `/opt/mattermost/scripts/sudo chmod +x batch_password_reset.rb`
@@ -83,23 +92,23 @@ if config_path.nil?
 	exit
 end
 
-# binary_paths = ['./mattermost', 
-#                 '../bin/mattermost', 
-#                 '../../bin/mattermost', 
-#                 '/opt/mattermost/bin/mattermost']
-# binary_path = nil
+binary_paths = ['./mattermost', 
+                '../bin/mattermost', 
+                '../../bin/mattermost', 
+                '/opt/mattermost/bin/mattermost']
+binary_path = nil
 
-# binary_paths.each do |test_binary_path|
-#     if File.file? test_binary_path
-#         binary_path = test_binary_path
-#         break
-#     end
-# end
+binary_paths.each do |test_binary_path|
+    if File.file? test_binary_path
+        binary_path = test_binary_path
+        break
+    end
+end
 
-# if binary_path.nil?
-#     puts "Couldn't find Mattermost binary. Please place this script in the directory /opt/mattermost"
-#     exit
-# end
+if binary_path.nil?
+    puts "Couldn't find Mattermost binary. Please place this script in the directory /opt/mattermost"
+    exit
+end
 
 config_hash = JSON.parse(File.read(config_path))
 
@@ -114,15 +123,30 @@ page = 0
 per_page = 200
 num_returned = 0
 
-
 mm = MattermostApi.new($config['mattermost'])
 
 loop do
     result = mm.get_users({page: page, per_page: per_page}) # max number of users per page
 
-    pp result
+    result.each do |user|
+        if user['auth_service'] == '' # Only do email users
+            puts "Resetting password for #{user['username']} (#{user['email']})"
+            if mandatory_password.nil?
+                password = generate_password(config_hash['PasswordSettings'])
+            else
+                password = mandatory_password    
+            end
+
+            # Reset the password via the CLI
+            system(binary_path, 'user', 'password', user['email'], password)
+
+            # Send the password reset email
+            mm.send_password_reset(user['email'])
+        else
+            puts "Not resetting password for #{user['username']} (#{user['email']})"
+        end
+    end
     
-    num_returned = result.length
-    break if num_returned < per_page
+    break if result.length < per_page
     page = page + 1
 end

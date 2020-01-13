@@ -2,7 +2,6 @@ require 'httparty'
 require 'uri'
 require 'time'
 require 'digest'
-require 'pp'
 
 class MattermostApi
 	include HTTParty
@@ -34,13 +33,13 @@ class MattermostApi
 			token = config['auth_token']
 		else
 			# Use password login
-			if (config.key?('login_id') && config.key?('password'))
-				token = get_login_token(config['login_id'], config['password'])
+			if (config.key?('username') && config.key?('password'))
+				token = get_auth_token(config['username'], config['password'])
 			end
 		end
 
 		if token.nil?
-			raise 'token not set, check for token or login_id and password'
+			raise 'token not set, check for token or username and password'
 		end
 		
 		@options[:headers]['Authorization'] = "Bearer #{token}"
@@ -51,20 +50,14 @@ class MattermostApi
 		url = URI.parse(url) rescue false
 	end
 
-	def get_all_users
-		page = 0
-		num_returned = 0
-		results = []
+	def get_auth_token(username, password)
+		response = post_data({login_id: username, password: password}, 'users/login')
+		
+		return response.headers['token']
+	end
 
-		loop do
-			result = get_url('users?per_page=200') # max number of users per page
-			num_returned = result.length
-			results = results + result
-
-			break if num_returned < 200
-		end
-
-		return results
+	def send_password_reset(email)
+		post_data({'email' => email}, 'users/password/reset/send')
 	end
 
 	def get_users(params)
@@ -76,13 +69,6 @@ class MattermostApi
 		options[:body] = payload.to_json
 		
 		return self.class.post("#{@base_uri}#{request_url}", options)
-	end
-
-	def put_data(payload, request_url)
-		options = @options
-		options[:body] = payload.to_json
-
-		self.class.put("#{@base_uri}#{request_url}", options)
 	end
 
 	def get_url(url)

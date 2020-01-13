@@ -1,0 +1,8 @@
+---
+mattermost:
+  url: http://127.0.0.1:8065/
+  auth_token: YOUR_AUTH_TOKEN
+  # Username and password required if you do not have an auth token
+  # username: admin
+  # password: admin
+  
